@@ -7,6 +7,7 @@ import ObjectListNavigator from "./object-list-navigator";
 import Actions from "./actions";
 import { useBucketContext } from "../context";
 import ShareDialog from "./share-dialog";
+import { SearchIcon, XIcon } from "lucide-react";
 
 const getInitialPrefixes = (searchParams: URLSearchParams) => {
   const prefix = searchParams.get("prefix");
@@ -24,6 +25,7 @@ const BrowseTab = () => {
     getInitialPrefixes(searchParams)
   );
   const [curPrefix, setCurPrefix] = useState(prefixHistory.length - 1);
+  const [uuidSearch, setUuidSearch] = useState("");
 
   useEffect(() => {
     const prefix = prefixHistory[curPrefix] || "";
@@ -59,9 +61,34 @@ const BrowseTab = () => {
           actions={<Actions prefix={prefixHistory[curPrefix] || ""} />}
         />
 
+        <div className="px-3 pb-2">
+          <div className="relative w-full max-w-xs">
+            <SearchIcon
+              size={14}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-base-content/40 pointer-events-none"
+            />
+            <input
+              type="text"
+              placeholder="Search by UUID..."
+              value={uuidSearch}
+              onChange={(e) => setUuidSearch(e.target.value)}
+              className="input input-sm w-full pl-8 pr-7 bg-base-200 text-sm"
+            />
+            {uuidSearch && (
+              <button
+                onClick={() => setUuidSearch("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-base-content/40 hover:text-base-content"
+              >
+                <XIcon size={13} />
+              </button>
+            )}
+          </div>
+        </div>
+
         <ObjectList
           prefix={prefixHistory[curPrefix] || ""}
           onPrefixChange={gotoPrefix}
+          uuidFilter={uuidSearch}
         />
 
         <ShareDialog />

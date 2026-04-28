@@ -20,9 +20,10 @@ import Button from "@/components/ui/button";
 type Props = {
   prefix?: string;
   onPrefixChange?: (prefix: string) => void;
+  uuidFilter?: string;
 };
 
-const ObjectList = ({ prefix, onPrefixChange }: Props) => {
+const ObjectList = ({ prefix, onPrefixChange, uuidFilter }: Props) => {
   const { bucketName } = useBucketContext();
   const {
     data,
@@ -33,13 +34,23 @@ const ObjectList = ({ prefix, onPrefixChange }: Props) => {
     isLoading,
   } = useBrowseObjects(bucketName, {
     prefix,
-    limit: 1000,
+    limit: 50,
   });
-  const prefixes = [
+  const filterStr = uuidFilter?.trim().toLowerCase() ?? "";
+  const allPrefixes = [
     ...new Set(data?.pages.flatMap((page) => page.prefixes) || []),
   ];
-  const objects = data?.pages.flatMap((page) => page.objects) || [];
+  const allObjects = data?.pages.flatMap((page) => page.objects) || [];
+  const prefixes = filterStr
+    ? allPrefixes.filter((p) => p.toLowerCase().includes(filterStr))
+    : allPrefixes;
+  const objects = filterStr
+    ? allObjects.filter((o) => o.objectKey.toLowerCase().includes(filterStr))
+    : allObjects;
   const currentPrefix = data?.pages[0]?.prefix || prefix || "";
+  const totalLoaded = allPrefixes.length + allObjects.length;
+  const totalVisible = prefixes.length + objects.length;
+  const isFiltered = filterStr.length > 0;
 
   const onObjectClick = (object: Object) => {
     window.open(API_URL + object.url + "?view=1", "_blank");
@@ -75,7 +86,9 @@ const ObjectList = ({ prefix, onPrefixChange }: Props) => {
           ) : !prefixes.length && !objects.length ? (
             <tr>
               <td className="text-center py-16" colSpan={4}>
-                No objects
+                {isFiltered
+                  ? `No objects matching "${uuidFilter}"`
+                  : "No objects"}
               </td>
             </tr>
           ) : null}
@@ -142,17 +155,26 @@ const ObjectList = ({ prefix, onPrefixChange }: Props) => {
             );
           })}
 
-          {hasNextPage && (
+          {!isLoading && (hasNextPage || totalLoaded > 0) && (
             <tr>
-              <td colSpan={4} className="text-center">
-                <Button
-                  icon={ChevronDownIcon}
-                  color="ghost"
-                  loading={isFetchingNextPage}
-                  onClick={() => fetchNextPage()}
-                >
-                  Load more
-                </Button>
+              <td colSpan={4}>
+                <div className="flex items-center justify-center gap-3 py-1">
+                  {hasNextPage && (
+                    <Button
+                      icon={ChevronDownIcon}
+                      color="ghost"
+                      loading={isFetchingNextPage}
+                      onClick={() => fetchNextPage()}
+                    >
+                      Load more
+                    </Button>
+                  )}
+                  <span className="text-base-content/40 text-xs">
+                    {isFiltered
+                      ? `${totalVisible} of ${totalLoaded} items match`
+                      : `${totalLoaded} item${totalLoaded !== 1 ? "s" : ""} loaded`}
+                  </span>
+                </div>
               </td>
             </tr>
           )}
