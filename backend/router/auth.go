@@ -18,8 +18,8 @@ type Auth struct{}
 
 const (
 	maxFailedLoginAttempts = 5
-	loginAttemptWindow     = 15 * time.Minute
-	loginLockoutDuration   = 15 * time.Minute
+	loginAttemptWindow     = 6 * time.Minute
+	loginLockoutDuration   = 10 * time.Minute
 )
 
 type loginAttempt struct {
