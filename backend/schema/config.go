@@ -26,3 +26,27 @@ type S3Web struct {
 	Index      string `json:"index" toml:"index"`
 	RootDomain string `json:"root_domain" toml:"root_domain"`
 }
+
+type PublicConfig struct {
+	RPCBindAddr   string      `json:"rpc_bind_addr"`
+	RPCPublicAddr string      `json:"rpc_public_addr"`
+	Admin         PublicAdmin `json:"admin"`
+	S3API         S3API       `json:"s3_api"`
+	S3Web         S3Web       `json:"s3_web"`
+}
+
+type PublicAdmin struct {
+	APIBindAddr string `json:"api_bind_addr"`
+}
+
+func (c Config) Public() PublicConfig {
+	return PublicConfig{
+		RPCBindAddr:   c.RPCBindAddr,
+		RPCPublicAddr: c.RPCPublicAddr,
+		Admin: PublicAdmin{
+			APIBindAddr: c.Admin.APIBindAddr,
+		},
+		S3API: c.S3API,
+		S3Web: c.S3Web,
+	}
+}

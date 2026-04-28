@@ -148,6 +148,7 @@ Configurable envs:
 - `API_ADMIN_KEY`: Admin API key.
 - `S3_REGION`: S3 Region.
 - `S3_ENDPOINT_URL`: S3 Endpoint url.
+- `SESSION_COOKIE_SECURE`: Set to `true` when serving only through HTTPS so session cookies are marked secure.
 
 ### Authentication
 

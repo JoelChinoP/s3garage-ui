@@ -1,7 +1,6 @@
 package router
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -32,6 +31,7 @@ func (b *Browse) GetObjects(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		limit = 100
 	}
+	limit = clampObjectListLimit(limit)
 
 	client, err := getS3Client(bucket)
 	if err != nil {
@@ -39,13 +39,17 @@ func (b *Browse) GetObjects(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	objects, err := client.ListObjectsV2(context.Background(), &s3.ListObjectsV2Input{
-		Bucket:            aws.String(bucket),
-		Prefix:            aws.String(prefix),
-		Delimiter:         aws.String("/"),
-		MaxKeys:           aws.Int32(int32(limit)),
-		ContinuationToken: aws.String(continuationToken),
-	})
+	input := &s3.ListObjectsV2Input{
+		Bucket:    aws.String(bucket),
+		Prefix:    aws.String(prefix),
+		Delimiter: aws.String("/"),
+		MaxKeys:   aws.Int32(int32(limit)),
+	}
+	if continuationToken != "" {
+		input.ContinuationToken = aws.String(continuationToken)
+	}
+
+	objects, err := client.ListObjectsV2(r.Context(), input)
 
 	if err != nil {
 		utils.ResponseError(w, err)
@@ -60,10 +64,16 @@ func (b *Browse) GetObjects(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, prefix := range objects.CommonPrefixes {
-		result.Prefixes = append(result.Prefixes, *prefix.Prefix)
+		if prefix.Prefix != nil {
+			result.Prefixes = append(result.Prefixes, *prefix.Prefix)
+		}
 	}
 
 	for _, object := range objects.Contents {
+		if object.Key == nil {
+			continue
+		}
+
 		key := strings.TrimPrefix(*object.Key, prefix)
 		if key == "" {
 			continue
@@ -95,7 +105,7 @@ func (b *Browse) GetOneObject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !view && !download && !thumbnail {
-		object, err := client.HeadObject(context.Background(), &s3.HeadObjectInput{
+		object, err := client.HeadObject(r.Context(), &s3.HeadObjectInput{
 			Bucket: aws.String(bucket),
 			Key:    aws.String(key),
 		})
@@ -106,7 +116,7 @@ func (b *Browse) GetOneObject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	object, err := client.GetObject(context.Background(), &s3.GetObjectInput{
+	object, err := client.GetObject(r.Context(), &s3.GetObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
 	})
@@ -198,7 +208,7 @@ func (b *Browse) PutObject(w http.ResponseWriter, r *http.Request) {
 		size = headers.Size
 	}
 
-	result, err := client.PutObject(context.Background(), &s3.PutObjectInput{
+	result, err := client.PutObject(r.Context(), &s3.PutObjectInput{
 		Bucket:        aws.String(bucket),
 		Key:           aws.String(key),
 		Body:          file,
@@ -228,50 +238,58 @@ func (b *Browse) DeleteObject(w http.ResponseWriter, r *http.Request) {
 
 	// Delete directory and its content
 	if isDirectory && recursive {
-		objects, err := client.ListObjectsV2(context.Background(), &s3.ListObjectsV2Input{
+		paginator := s3.NewListObjectsV2Paginator(client, &s3.ListObjectsV2Input{
 			Bucket: aws.String(bucket),
 			Prefix: aws.String(key),
 		})
 
-		if err != nil {
-			utils.ResponseError(w, err)
-			return
-		}
+		deleted := 0
+		for paginator.HasMorePages() {
+			objects, err := paginator.NextPage(r.Context())
+			if err != nil {
+				utils.ResponseError(w, err)
+				return
+			}
 
-		if len(objects.Contents) == 0 {
-			utils.ResponseSuccess(w, true)
-			return
-		}
+			keys := make([]types.ObjectIdentifier, 0, len(objects.Contents))
+			for _, object := range objects.Contents {
+				if object.Key == nil {
+					continue
+				}
 
-		keys := make([]types.ObjectIdentifier, 0, len(objects.Contents))
+				keys = append(keys, types.ObjectIdentifier{
+					Key: object.Key,
+				})
+			}
 
-		for _, object := range objects.Contents {
-			keys = append(keys, types.ObjectIdentifier{
-				Key: object.Key,
+			if len(keys) == 0 {
+				continue
+			}
+
+			res, err := client.DeleteObjects(r.Context(), &s3.DeleteObjectsInput{
+				Bucket: aws.String(bucket),
+				Delete: &types.Delete{Objects: keys},
 			})
+
+			if err != nil {
+				utils.ResponseError(w, fmt.Errorf("cannot delete object: %w", err))
+				return
+			}
+
+			if len(res.Errors) > 0 {
+				utils.ResponseError(w, fmt.Errorf("cannot delete object: %v", res.Errors[0]))
+				return
+			}
+
+			deleted += len(keys)
 		}
 
-		res, err := client.DeleteObjects(context.Background(), &s3.DeleteObjectsInput{
-			Bucket: aws.String(bucket),
-			Delete: &types.Delete{Objects: keys},
-		})
-
-		if err != nil {
-			utils.ResponseError(w, fmt.Errorf("cannot delete object: %w", err))
-			return
-		}
-
-		if len(res.Errors) > 0 {
-			utils.ResponseError(w, fmt.Errorf("cannot delete object: %v", res.Errors[0]))
-			return
-		}
-
-		utils.ResponseSuccess(w, res)
+		utils.ResponseSuccess(w, map[string]int{"deleted": deleted})
 		return
 	}
 
 	// Delete single object
-	res, err := client.DeleteObject(context.Background(), &s3.DeleteObjectInput{
+	res, err := client.DeleteObject(r.Context(), &s3.DeleteObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
 	})
@@ -282,6 +300,16 @@ func (b *Browse) DeleteObject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	utils.ResponseSuccess(w, res)
+}
+
+func clampObjectListLimit(limit int) int {
+	if limit < 1 {
+		return 100
+	}
+	if limit > 1000 {
+		return 1000
+	}
+	return limit
 }
 
 func getBucketCredentials(bucket string) (aws.CredentialsProvider, error) {

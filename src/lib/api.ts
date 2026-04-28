@@ -8,6 +8,7 @@ type FetchOptions = Omit<RequestInit, "headers" | "body"> & {
 };
 
 export const API_URL = BASE_PATH + "/api";
+let csrfToken: string | null = null;
 
 export class APIError extends Error {
   status!: number;
@@ -26,6 +27,9 @@ const api = {
 
     if (options?.params) {
       Object.entries(options.params).forEach(([key, value]) => {
+        if (value === undefined || value === null || value === "") {
+          return;
+        }
         _url.searchParams.set(key, String(value));
       });
     }
@@ -36,6 +40,14 @@ const api = {
     ) {
       options.body = JSON.stringify(options.body);
       headers["Content-Type"] = "application/json";
+    }
+
+    if (
+      options?.method &&
+      !["GET", "HEAD", "OPTIONS"].includes(options.method) &&
+      csrfToken
+    ) {
+      headers["X-CSRF-Token"] = csrfToken;
     }
 
     const res = await fetch(_url, {
@@ -61,6 +73,10 @@ const api = {
         ? data
         : res.statusText;
       throw new APIError(message, res.status);
+    }
+
+    if (isJson && data?.csrfToken) {
+      csrfToken = data.csrfToken;
     }
 
     return data as unknown as T;

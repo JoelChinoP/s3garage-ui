@@ -8,6 +8,6 @@ import (
 type Config struct{}
 
 func (c *Config) GetAll(w http.ResponseWriter, r *http.Request) {
-	config := utils.Garage.Config
+	config := utils.Garage.Config.Public()
 	utils.ResponseSuccess(w, config)
 }

@@ -5,6 +5,7 @@ import mime from "mime/lite";
 import { Object } from "./types";
 import { API_URL } from "@/lib/api";
 import {
+  ChevronDownIcon,
   CircleXIcon,
   FileArchive,
   FileIcon,
@@ -14,6 +15,7 @@ import {
 import { useBucketContext } from "../context";
 import ObjectActions from "./object-actions";
 import GotoTopButton from "@/components/ui/goto-top-btn";
+import Button from "@/components/ui/button";
 
 type Props = {
   prefix?: string;
@@ -22,10 +24,22 @@ type Props = {
 
 const ObjectList = ({ prefix, onPrefixChange }: Props) => {
   const { bucketName } = useBucketContext();
-  const { data, error, isLoading } = useBrowseObjects(bucketName, {
+  const {
+    data,
+    error,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading,
+  } = useBrowseObjects(bucketName, {
     prefix,
     limit: 1000,
   });
+  const prefixes = [
+    ...new Set(data?.pages.flatMap((page) => page.prefixes) || []),
+  ];
+  const objects = data?.pages.flatMap((page) => page.objects) || [];
+  const currentPrefix = data?.pages[0]?.prefix || prefix || "";
 
   const onObjectClick = (object: Object) => {
     window.open(API_URL + object.url + "?view=1", "_blank");
@@ -38,12 +52,13 @@ const ObjectList = ({ prefix, onPrefixChange }: Props) => {
           <span>Name</span>
           <span>Size</span>
           <span>Last Modified</span>
+          <span />
         </Table.Head>
 
         <Table.Body>
           {isLoading ? (
             <tr>
-              <td colSpan={3}>
+              <td colSpan={4}>
                 <div className="h-[320px] flex items-center justify-center">
                   <Loading />
                 </div>
@@ -51,21 +66,21 @@ const ObjectList = ({ prefix, onPrefixChange }: Props) => {
             </tr>
           ) : error ? (
             <tr>
-              <td colSpan={3}>
+              <td colSpan={4}>
                 <Alert status="error" icon={<CircleXIcon />}>
                   <span>{error.message}</span>
                 </Alert>
               </td>
             </tr>
-          ) : !data?.prefixes?.length && !data?.objects?.length ? (
+          ) : !prefixes.length && !objects.length ? (
             <tr>
-              <td className="text-center py-16" colSpan={3}>
+              <td className="text-center py-16" colSpan={4}>
                 No objects
               </td>
             </tr>
           ) : null}
 
-          {data?.prefixes.map((prefix) => (
+          {prefixes.map((prefix) => (
             <tr
               key={prefix}
               className="hover:bg-neutral/60 hover:text-neutral-content group"
@@ -88,7 +103,7 @@ const ObjectList = ({ prefix, onPrefixChange }: Props) => {
             </tr>
           ))}
 
-          {data?.objects.map((object, idx) => {
+          {objects.map((object, idx) => {
             const extIdx = object.objectKey.lastIndexOf(".");
             const filename =
               extIdx >= 0
@@ -119,15 +134,28 @@ const ObjectList = ({ prefix, onPrefixChange }: Props) => {
                   {dayjs(object.lastModified).fromNow()}
                 </td>
                 <ObjectActions
-                  prefix={data.prefix}
+                  prefix={currentPrefix}
                   object={object}
-                  end={
-                    idx >= data.objects.length - 2 && data.objects.length > 5
-                  }
+                  end={idx >= objects.length - 2 && objects.length > 5}
                 />
               </tr>
             );
           })}
+
+          {hasNextPage && (
+            <tr>
+              <td colSpan={4} className="text-center">
+                <Button
+                  icon={ChevronDownIcon}
+                  color="ghost"
+                  loading={isFetchingNextPage}
+                  onClick={() => fetchNextPage()}
+                >
+                  Load more
+                </Button>
+              </td>
+            </tr>
+          )}
         </Table.Body>
       </Table>
 

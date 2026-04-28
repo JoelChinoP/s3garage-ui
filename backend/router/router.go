@@ -30,6 +30,6 @@ func HandleApiRouter() *http.ServeMux {
 	// Proxy request to garage api endpoint
 	router.HandleFunc("/", ProxyHandler)
 
-	mux.Handle("/", middleware.AuthMiddleware(router))
+	mux.Handle("/", middleware.AuthMiddleware(middleware.CSRFMiddleware(router)))
 	return mux
 }

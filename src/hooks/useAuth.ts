@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 type AuthResponse = {
   enabled: boolean;
   authenticated: boolean;
+  csrfToken?: string;
 };
 
 export const useAuth = () => {
